@@ -344,16 +344,28 @@ def load_portfolio(cache_bust: tuple):
 HIST_FROM = "1970-01-01"
 HIST_TO = "2100-01-01"
 
-# --- Refresh JSONs on each run ---
-fetch_to_file(f"{BASE}/api/v0/equity/portfolio", Path("data/portfolio.json"))
-fetch_to_file(
-    f"{BASE}/api/v0/history/transactions?from={HIST_FROM}&to={HIST_TO}",
-    Path("data/transactions.json")
-)
-fetch_to_file(
-    f"{BASE}/api/v0/history/dividends?from={HIST_FROM}&to={HIST_TO}",
-    Path("data/dividends.json")
-)
+# --- Refresh JSONs (Cached) ---
+@st.cache_data(ttl=3600)
+def sync_data_cached():
+    """Fetch fresh data from Trading 212 and save to local JSON files."""
+    fetch_to_file(f"{BASE}/api/v0/equity/portfolio", Path("data/portfolio.json"))
+    fetch_to_file(
+        f"{BASE}/api/v0/history/transactions?from={HIST_FROM}&to={HIST_TO}",
+        Path("data/transactions.json")
+    )
+    fetch_to_file(
+        f"{BASE}/api/v0/history/dividends?from={HIST_FROM}&to={HIST_TO}",
+        Path("data/dividends.json")
+    )
+
+if st.sidebar.button("🔄 Sync with Trading 212", help="Fetch fresh data from the T212 API (updates files in data/ folder)"):
+    st.cache_data.clear()
+    sync_data_cached()
+    st.success("Data synced successfully!")
+    st.rerun()
+
+# Initial sync (uses cache if within TTL)
+sync_data_cached()
 
 for p in [Path("data/portfolio.json"), Path("data/transactions.json"), Path("data/dividends.json")]:
     try:
