@@ -1,28 +1,25 @@
-# Python and local env
+# Python
 __pycache__/
-.venv/
+*.py[cod]
+*$py.class
+venv/
 .env
 
-# Streamlit local secrets (never commit)
+# Streamlit
+.streamlit/config.toml
+root/.streamlit/secrets.toml
 .streamlit/secrets.toml
+streamlit.log
 
-# Default: ignore everything in data/
+# Local data (Private)
 data/*
-
-# ...but allow these cache files for the public app
-!data/portfolio.json
-!data/transactions.json
-!data/dividends.json
-!data/nav_daily.csv
-!data/fundamentals.json
-!data/fundamentals_audit.csv
-!data/open_prices.json
-!data/account.json
 !data/README.md
-!data/_*.csv        # audit CSVs (e.g., _twr_audit.csv)
 
-# Bench data
-bench/*
-!bench/sp500_daily.csv
-# Local Streamlit secrets
-.streamlit/secrets.toml
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
