@@ -167,7 +167,18 @@ def _compute_metrics_for_symbol(yf_sym: str) -> dict:
     gm   = _safe_ratio(gp, rev)
     om   = _safe_ratio(ebit, rev)
     cc   = _safe_ratio(fcf, ebit)
-    ic   = _safe_ratio(ebit, abs(intexp) if intexp is not None else None)
+    
+    # Interest Cover: Raw ratio, no capping.
+    ic = None
+    if ebit is not None:
+        abs_int = abs(intexp) if intexp is not None else 0
+        if abs_int < 0.01: # Zero or negligible interest
+            ic = None # Exclude from average if math is impossible, or use very high? 
+            # User wants it not to be 'wrong'. Debt-free is 'Infinite'.
+            # We'll use a very high sentinel for the audit but maybe None for aggregate if ambiguous.
+            if ebit > 0: ic = 1000.0 
+        else:
+            ic = _safe_ratio(ebit, abs_int)
 
     return {
         "basis": basis,
@@ -211,10 +222,10 @@ def ensure_fundamentals(weights_t212: dict[str, float]) -> Path:
         raise RuntimeError("yfinance is required for fundamentals.")
     FUND_JSON.parent.mkdir(parents=True, exist_ok=True)
 
-    # Cache policy: rebuild if older than 7 days
+    # Cache policy: rebuild if older than 1 day
     if FUND_JSON.exists():
         age_days = (datetime.utcnow() - datetime.utcfromtimestamp(FUND_JSON.stat().st_mtime)).days
-        if age_days < 7:
+        if age_days < 1:
             return FUND_JSON
 
     # Map weights to Yahoo

@@ -201,13 +201,22 @@ def _load_overrides() -> dict:
     return {}
 
 
-def _get_yf_symbol_from_t212(t212_ticker: str) -> str | None:
+def _get_yf_symbol_from_t212(t212_ticker: str, overrides: dict | None = None) -> str | None:
     """
     Convert T212 ticker to yfinance symbol (backwards compatibility for fundamentals.py).
+    If overrides provided, will check them first.
     Returns just the yf symbol, no currency.
     """
     t = (t212_ticker or "").strip().upper()
     
+    # 1) Try overrides if provided
+    if overrides and t in overrides:
+        v = overrides[t]
+        if isinstance(v, dict):
+            return v.get("yf")
+        return str(v)
+
+    # 2) Fallback to heuristic
     # US stocks - no suffix
     if "_US_" in t:
         return t.split("_")[0]
