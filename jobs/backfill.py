@@ -1,4 +1,4 @@
-# jobs/backfill.py
+# jobs/backfill.py (v3.1 - Consolidated & Verified)
 """
 Trading212 Order History → NAV Backfill with yfinance Prices
 Includes debug export for granular NAV breakdown analysis.
@@ -53,6 +53,7 @@ OVERRIDES_PATH = DATA_DIR / "ticker_overrides.json"
 POSITIONS_CACHE = DATA_DIR / "positions_cache.parquet"
 PRICES_CACHE = DATA_DIR / "prices_cache.parquet"
 MAPPING_CACHE = DATA_DIR / "mapping_cache.json"
+TRACE_PATH = DATA_DIR / "_backfill_trace.txt"
 
 
 def _auth_headers():
@@ -272,12 +273,6 @@ def _build_position_timeseries(orders: pd.DataFrame, start: date, end: date) -> 
     orders["filledAt"] = pd.to_datetime(orders["filledAt"], errors="coerce", utc=True).dt.date
     orders = orders.dropna(subset=["filledAt", "ticker", "filledQuantity"])
 
-    # PRINT DEBUG
-    print("=== DEBUG: ORDERS BEFORE PROCESSING ===")
-    for _, r in orders[orders["ticker"] == "LSEl_EQ"].iterrows():
-        print(f"  {r['side']} {r['filledQuantity']} @ {r['filledAt']}")
-    print(f"Total LSEl_EQ orders: {len(orders[orders['ticker'] == 'LSEl_EQ'])}")
-
     # BUY = +qty, SELL = -qty
     # Take absolute value because T212 returns negative quantities for SELLs
     side_str = orders.get("side", "BUY").astype(str).str.upper()
@@ -287,20 +282,6 @@ def _build_position_timeseries(orders: pd.DataFrame, start: date, end: date) -> 
 
     daily = (orders.groupby(["filledAt", "ticker"], as_index=False)["signed_qty"]
              .sum().rename(columns={"filledAt": "date"}))
-
-    # Debug: Check daily aggregation
-    print("=== DEBUG: DAILY AGGREGATION CHECK ===")
-    lseg_daily = daily[daily["ticker"] == "LSEl_EQ"]
-    print(f"Columns: {daily.columns.tolist()}")
-    print(f"LSEl_EQ daily data:")
-    print(lseg_daily.to_string())
-    print(f"signed_qty values: {lseg_daily['signed_qty'].tolist()}")
-    
-    # PRINT DEBUG
-    print("=== DEBUG: DAILY CHANGES FOR LSEl_EQ ===")
-    for _, r in daily[daily["ticker"] == "LSEl_EQ"].iterrows():
-        print(f"  {r['date']}: {r['signed_qty']}")
-    print(f"Total LSEl_EQ daily changes: {len(daily[daily['ticker'] == 'LSEl_EQ'])}")
 
     idx = pd.date_range(start, end, freq="D").date
     tickers = sorted(daily["ticker"].unique().tolist())
@@ -312,28 +293,57 @@ def _build_position_timeseries(orders: pd.DataFrame, start: date, end: date) -> 
         q = float(r["signed_qty"])
         mat.loc[mat.index >= d, tk] += q
 
-    # PRINT DEBUG
-    print("=== DEBUG: FINAL POSITIONS FOR LSEl_EQ ===")
-    lseg_pos = mat["LSEl_EQ"].dropna()
-    for d, v in lseg_pos.items():
-        if v != 0:
-            print(f"  {d}: {v}")
-    print(f"Final LSEl_EQ position: {lseg_pos.iloc[-1] if len(lseg_pos) > 0 else 0}")
-
     # drop all-zero columns and guarantee float64
     mat = mat.loc[:, (mat != 0).any(axis=0)].astype("float64")
     return mat
 
 
 def _download_fx_usd_gbp(start: date, end: date) -> pd.Series:
-    """Fetch USD→GBP rates from Frankfurter API."""
-    url = f"https://api.frankfurter.app/{start}..{end}"
-    r = requests.get(url, params={"from": "USD", "to": "GBP"}, timeout=20)
-    r.raise_for_status()
-    data = r.json().get("rates", {})
-    fx = pd.DataFrame.from_dict(data, orient="index").rename(columns={"GBP": "usd_gbp"})
-    fx.index = pd.to_datetime(fx.index).date
-    return fx["usd_gbp"]
+    """Fetch USD→GBP rates from yfinance instead of Frankfurter (which is unstable)."""
+    try:
+        import yfinance as yf
+        # Request data for the entire range + 1 day buffer
+        df = yf.download(
+            "USDGBP=X",
+            start=str(start),
+            end=str(end + timedelta(days=1)),
+            interval="1d",
+            progress=False,
+            threads=False
+        )
+        
+        if df.empty:
+            raise RuntimeError("yfinance returned empty FX data")
+            
+        # Handle MultiIndex columns if present
+        if isinstance(df.columns, pd.MultiIndex):
+            # Try to get Close for USDGBP=X
+            if "Close" in df.columns.levels[0] and "USDGBP=X" in df.columns.levels[1]:
+                fx = df["Close"]["USDGBP=X"]
+            else:
+                # Fallback: take the first column of the first level if it looks like price data
+                fx = df.iloc[:, 0]
+        else:
+            fx = df["Close"] if "Close" in df else df.iloc[:, 0]
+            
+        fx.index = pd.to_datetime(fx.index).date
+        return fx
+        
+    except Exception as e:
+        print(f"[WARN] yfinance FX download failed: {e}. Trying fallback to Frankfurter...")
+        # Fallback to Frankfurter with a shorter range or just pray
+        try:
+            url = f"https://api.frankfurter.app/{start}..{end}"
+            r = requests.get(url, params={"from": "USD", "to": "GBP"}, timeout=15)
+            r.raise_for_status()
+            data = r.json().get("rates", {})
+            fx = pd.DataFrame.from_dict(data, orient="index").rename(columns={"GBP": "usd_gbp"})
+            fx.index = pd.to_datetime(fx.index).date
+            return fx["usd_gbp"]
+        except Exception as e2:
+            print(f"[ERROR] Frankfurter fallback also failed: {e2}")
+            # If everything fails, return empty series and let the caller handle it (it will use ffill/bfill)
+            return pd.Series(dtype="float64")
 
 
 def _download_prices(yf_map: dict[str, tuple[str, str]], start: date, end: date) -> tuple[pd.DataFrame, list[str]]:
@@ -429,6 +439,8 @@ def _download_prices(yf_map: dict[str, tuple[str, str]], start: date, end: date)
     for c in out.columns:
         out[c] = pd.to_numeric(out[c], errors="coerce").astype("float64")
 
+    return out, missing
+
 # ---------------------------
 # Core: Fetch Raw Data
 # ---------------------------
@@ -472,18 +484,12 @@ def _fetch_orders(end_date: date) -> pd.DataFrame:
     })
 
 
-def backfill_nav_from_orders(start: str = "2025-01-01", end: str | None = None) -> Path:
-    """
-    Rebuild nav_daily.csv using Trading212 orders + yfinance prices.
-    Also saves positions and prices cache for debugging.
-    """
-    import traceback
-
 # ---------------------------
 # Main: NAV Backfill
 # ---------------------------
 def backfill_nav_from_orders(start: str = "2025-01-01", end: str | None = None) -> Path:
     """Rebuild nav_daily.csv from Trading212 orders + yfinance prices."""
+    import traceback
 
     def _dump_trace(stage: str, pos=None, prices=None):
         try:
@@ -514,13 +520,6 @@ def backfill_nav_from_orders(start: str = "2025-01-01", end: str | None = None) 
         url = f"{API_BASE}/api/v0/equity/history/orders?from={fetch_from}&to={d1}"
         items = _paged_get(url)
 
-        # Debug: Show raw orders for LSEl_EQ
-        print("=== DEBUG: RAW ORDERS FOR LSEl_EQ ===")
-        lseg_orders = [o for o in items if o.get("ticker") == "LSEl_EQ"]
-        for i, o in enumerate(lseg_orders):
-            print(f"{i+1}. {o.get('side')} {o.get('filledQuantity')} @ {o.get('filledAt')}")
-        print(f"Total LSEl_EQ orders: {len(lseg_orders)}")
-        
         if not items:
             raise RuntimeError("No order history returned from Trading212.")
 
@@ -575,12 +574,6 @@ def backfill_nav_from_orders(start: str = "2025-01-01", end: str | None = None) 
         pos = pos[keep]
         prices = prices[keep]
 
-        # === BUILD CASH TIMESERIES ===
-        # === CASH TRACKING DISABLED ===
-        # The old working version didn't track cash - positions * prices was enough
-        # because trades are neutral (sell A, buy B = same NAV, just different holdings)
-        cash_series = pd.Series(0.0, index=pos.index)
-
         # 6) Forward fill
         full_idx = pd.date_range(d0, d1, freq="D").date
         prices = prices.sort_index().reindex(full_idx).ffill().bfill().astype("float64")
@@ -594,7 +587,7 @@ def backfill_nav_from_orders(start: str = "2025-01-01", end: str | None = None) 
         except Exception as e:
             print(f"[WARN] Failed to save debug caches: {e}")
 
-        # 7) Calculate NAV (positions only, like the old working version)
+        # 7) Calculate NAV
         pos_np = pos.to_numpy(dtype=np.float64, na_value=np.nan)
         prices_np = prices.to_numpy(dtype=np.float64, na_value=np.nan)
         nav_vals = np.nansum(pos_np * prices_np, axis=1)
