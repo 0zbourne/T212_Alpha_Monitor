@@ -56,13 +56,26 @@ hr { margin: 2rem 0 !important; border: 0; border-top: 1px solid rgba(255, 255, 
 
 def sleek_metric(label, value, bench=None):
     bench_html = ""
-    if bench:
+    val_color = "#FFFFFF"
+    
+    if bench and value != "N/A":
+        try:
+            val_num = float(value.replace("%", "").replace("x", ""))
+            bench_num = float(bench.replace("%", "").replace("x", ""))
+            
+            if val_num >= bench_num:
+                val_color = "#00DB8B" # Green / beat
+            else:
+                val_color = "#FF4B4B" # Red / miss
+        except ValueError:
+            pass
+            
         bench_html = f'<div style="font-size: 0.75rem; color: #8892B0; margin-top: 4px;">S&P 500: <span style="color: #FFFFFF; font-weight: 500;">{bench}</span></div>'
 
     st.markdown(f"""
         <div class="metric-card">
             <div class="metric-label">{label}</div>
-            <div class="metric-value">{value}</div>
+            <div class="metric-value" style="color: {val_color};">{value}</div>
             {bench_html}
         </div>
     """, unsafe_allow_html=True)
