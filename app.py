@@ -54,11 +54,16 @@ hr { margin: 2rem 0 !important; border: 0; border-top: 1px solid rgba(255, 255, 
 </style>
 """, unsafe_allow_html=True)
 
-def sleek_metric(label, value):
+def sleek_metric(label, value, bench=None):
+    bench_html = ""
+    if bench:
+        bench_html = f'<div style="font-size: 0.75rem; color: #8892B0; margin-top: 4px;">S&P 500: <span style="color: #FFFFFF; font-weight: 500;">{bench}</span></div>'
+
     st.markdown(f"""
         <div class="metric-card">
             <div class="metric-label">{label}</div>
             <div class="metric-value">{value}</div>
+            {bench_html}
         </div>
     """, unsafe_allow_html=True)
 
@@ -168,13 +173,13 @@ q = (fund_data or {}).get("portfolio_weighted", {})
 def fmt(v, suffix="%"): return f"{v*100:.1f}{suffix}" if v and not (np.isnan(v) or np.isinf(v)) else "N/A"
 
 q_cols = st.columns(5)
-with q_cols[0]: sleek_metric("ROCE", fmt(q.get("roce")))
-with q_cols[1]: sleek_metric("Gross Margin", fmt(q.get("gm")))
-with q_cols[2]: sleek_metric("Op. Margin", fmt(q.get("om")))
-with q_cols[3]: sleek_metric("Cash Conv.", fmt(q.get("cc")))
+with q_cols[0]: sleek_metric("ROCE", fmt(q.get("roce")), "17%")
+with q_cols[1]: sleek_metric("Gross Margin", fmt(q.get("gm")), "45%")
+with q_cols[2]: sleek_metric("Op. Margin", fmt(q.get("om")), "18%")
+with q_cols[3]: sleek_metric("Cash Conv.", fmt(q.get("cc")), "89%")
 with q_cols[4]: 
     ic_val = q.get("ic")
-    sleek_metric("Int. Cover", f"{ic_val:.1f}x" if ic_val else "N/A")
+    sleek_metric("Int. Cover", f"{ic_val:.1f}x" if ic_val else "N/A", "9x")
 
 st.divider()
 
