@@ -185,7 +185,7 @@ q = (fund_data or {}).get("portfolio_weighted", {})
 # ---- DASHBOARD HERO: QUALITY BENCHMARKS ----
 def fmt(v, suffix="%"): return f"{v*100:.1f}{suffix}" if v and not (np.isnan(v) or np.isinf(v)) else "N/A"
 
-q_cols = st.columns(5)
+q_cols = st.columns(6)
 with q_cols[0]: sleek_metric("ROCE", fmt(q.get("roce")), "17%")
 with q_cols[1]: sleek_metric("Gross Margin", fmt(q.get("gm")), "45%")
 with q_cols[2]: sleek_metric("Op. Margin", fmt(q.get("om")), "18%")
@@ -193,6 +193,7 @@ with q_cols[3]: sleek_metric("Cash Conv.", fmt(q.get("cc")), "89%")
 with q_cols[4]: 
     ic_val = q.get("ic")
     sleek_metric("Int. Cover", f"{ic_val:.1f}x" if ic_val else "N/A", "9x")
+with q_cols[5]: sleek_metric("FCF Yield", fmt(q.get("fcf_yield")), "4%")
 
 st.divider()
 
@@ -201,10 +202,10 @@ if FUND_AUDIT.exists():
     audit_df = pd.read_csv(FUND_AUDIT)
     
     # Merge with portfolio to get names if possible, else use symbol-pretty
-    display_audit = audit_df[["symbol", "weight", "roce", "gm", "om", "cc", "ic"]].copy()
+    display_audit = audit_df[["symbol", "weight", "roce", "gm", "om", "cc", "ic", "fcf_yield"]].copy()
     
     # Scale decimals to percentages (0.85 -> 85.0) for display
-    cols_to_scale = ["weight", "roce", "gm", "om", "cc"]
+    cols_to_scale = ["weight", "roce", "gm", "om", "cc", "fcf_yield"]
     for c in cols_to_scale:
         display_audit[c] = display_audit[c] * 100.0
     
@@ -219,7 +220,8 @@ if FUND_AUDIT.exists():
             "gm": st.column_config.NumberColumn("Gross Margin", format="%.1f%%"),
             "om": st.column_config.NumberColumn("Op. Margin", format="%.1f%%"),
             "cc": st.column_config.NumberColumn("Cash Conv.", format="%.1f%%"),
-            "ic": st.column_config.NumberColumn("Int. Cover", format="%.1fx")
+            "ic": st.column_config.NumberColumn("Int. Cover", format="%.1fx"),
+            "fcf_yield": st.column_config.NumberColumn("FCF Yield", format="%.1f%%")
         }
     )
     st.divider()
