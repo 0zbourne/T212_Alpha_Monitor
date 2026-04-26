@@ -230,7 +230,7 @@ if FUND_AUDIT.exists():
 st.subheader("Performance Comparison (vs S&P 500)")
 try:
     # Update snapshot for benchmarking
-    append_today_snapshot_if_missing(portfolio)
+    append_today_snapshot_if_missing(portfolio, q)
     
     nav_data = read_nav()
     flow_data = build_cash_flows(TRANSACTIONS_JSON)
@@ -266,6 +266,30 @@ try:
         st.info("Insufficient historical data for performance comparison.")
 except Exception as e:
     st.error(f"Performance chart error: {e}")
+
+st.divider()
+
+st.subheader("Historical Quality Trend (ROCE)")
+try:
+    if NAV_CSV.exists():
+        nav_df = pd.read_csv(NAV_CSV)
+        if "roce" in nav_df.columns and nav_df["roce"].notna().any():
+            # Filter non-null ROCE
+            q_df = nav_df[["date", "roce"]].dropna().copy()
+            q_df["date"] = pd.to_datetime(q_df["date"])
+            q_df["ROCE (%)"] = q_df["roce"] * 100.0
+            
+            q_chart = alt.Chart(q_df).mark_line(strokeWidth=2.5, point=True, color="#00DB8B").encode(
+                x=alt.X("date:T", title=None, axis=alt.Axis(grid=False, labelColor="#8892B0")),
+                y=alt.Y("ROCE (%):Q", title="Weighted ROCE (%)", scale=alt.Scale(zero=False), axis=alt.Axis(grid=True, gridColor="rgba(255,255,255,0.05)", labelColor="#8892B0")),
+                tooltip=["date:T", alt.Tooltip("ROCE (%):Q", format=".1f")]
+            ).properties(height=300).configure_view(strokeOpacity=0)
+            
+            st.altair_chart(q_chart, use_container_width=True)
+        else:
+            st.info("Insufficient historical quality data.")
+except Exception as e:
+    st.error(f"Quality trend chart error: {e}")
 
 # ---- FOOTER EXTRAS ----
 with st.expander("Quality Audit (Per Ticker)"):
