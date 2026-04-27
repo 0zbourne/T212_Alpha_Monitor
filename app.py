@@ -185,7 +185,7 @@ q = (fund_data or {}).get("portfolio_weighted", {})
 # ---- DASHBOARD HERO: QUALITY BENCHMARKS ----
 def fmt(v, suffix="%"): return f"{v*100:.1f}{suffix}" if v and not (np.isnan(v) or np.isinf(v)) else "N/A"
 
-q_cols = st.columns(6)
+q_cols = st.columns(5)
 with q_cols[0]: sleek_metric("ROCE", fmt(q.get("roce")), "17%")
 with q_cols[1]: sleek_metric("Gross Margin", fmt(q.get("gm")), "45%")
 with q_cols[2]: sleek_metric("Op. Margin", fmt(q.get("om")), "18%")
@@ -193,7 +193,6 @@ with q_cols[3]: sleek_metric("Cash Conv.", fmt(q.get("cc")), "89%")
 with q_cols[4]: 
     ic_val = q.get("ic")
     sleek_metric("Int. Cover", f"{ic_val:.1f}x" if ic_val else "N/A", "9x")
-with q_cols[5]: sleek_metric("FCF Yield", fmt(q.get("fcf_yield")), "4%")
 
 st.divider()
 
@@ -202,10 +201,10 @@ if FUND_AUDIT.exists():
     audit_df = pd.read_csv(FUND_AUDIT)
     
     # Merge with portfolio to get names if possible, else use symbol-pretty
-    display_audit = audit_df[["symbol", "weight", "roce", "gm", "om", "cc", "ic", "fcf_yield"]].copy()
+    display_audit = audit_df[["symbol", "weight", "roce", "gm", "om", "cc", "ic"]].copy()
     
     # Scale decimals to percentages (0.85 -> 85.0) for display
-    cols_to_scale = ["weight", "roce", "gm", "om", "cc", "fcf_yield"]
+    cols_to_scale = ["weight", "roce", "gm", "om", "cc"]
     for c in cols_to_scale:
         display_audit[c] = display_audit[c] * 100.0
     
@@ -220,8 +219,7 @@ if FUND_AUDIT.exists():
             "gm": st.column_config.NumberColumn("Gross Margin", format="%.1f%%"),
             "om": st.column_config.NumberColumn("Op. Margin", format="%.1f%%"),
             "cc": st.column_config.NumberColumn("Cash Conv.", format="%.1f%%"),
-            "ic": st.column_config.NumberColumn("Int. Cover", format="%.1fx"),
-            "fcf_yield": st.column_config.NumberColumn("FCF Yield", format="%.1f%%")
+            "ic": st.column_config.NumberColumn("Int. Cover", format="%.1fx")
         }
     )
     st.divider()
@@ -230,7 +228,7 @@ if FUND_AUDIT.exists():
 st.subheader("Performance Comparison (vs S&P 500)")
 try:
     # Update snapshot for benchmarking
-    append_today_snapshot_if_missing(portfolio, q)
+    append_today_snapshot_if_missing(portfolio)
     
     nav_data = read_nav()
     flow_data = build_cash_flows(TRANSACTIONS_JSON)
@@ -266,30 +264,6 @@ try:
         st.info("Insufficient historical data for performance comparison.")
 except Exception as e:
     st.error(f"Performance chart error: {e}")
-
-st.divider()
-
-st.subheader("Historical Quality Trend (ROCE)")
-try:
-    if NAV_CSV.exists():
-        nav_df = pd.read_csv(NAV_CSV)
-        if "roce" in nav_df.columns and nav_df["roce"].notna().any():
-            # Filter non-null ROCE
-            q_df = nav_df[["date", "roce"]].dropna().copy()
-            q_df["date"] = pd.to_datetime(q_df["date"])
-            q_df["ROCE (%)"] = q_df["roce"] * 100.0
-            
-            q_chart = alt.Chart(q_df).mark_line(strokeWidth=2.5, point=True, color="#00DB8B").encode(
-                x=alt.X("date:T", title=None, axis=alt.Axis(grid=False, labelColor="#8892B0")),
-                y=alt.Y("ROCE (%):Q", title="Weighted ROCE (%)", scale=alt.Scale(zero=False), axis=alt.Axis(grid=True, gridColor="rgba(255,255,255,0.05)", labelColor="#8892B0")),
-                tooltip=["date:T", alt.Tooltip("ROCE (%):Q", format=".1f")]
-            ).properties(height=300).configure_view(strokeOpacity=0)
-            
-            st.altair_chart(q_chart, use_container_width=True)
-        else:
-            st.info("Insufficient historical quality data.")
-except Exception as e:
-    st.error(f"Quality trend chart error: {e}")
 
 # ---- FOOTER EXTRAS ----
 with st.expander("Quality Audit (Per Ticker)"):

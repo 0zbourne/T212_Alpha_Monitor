@@ -102,9 +102,6 @@ def _compute_metrics_for_symbol(yf_sym: str) -> dict:
     """Return dict with roce, gm, om, cc, ic, and basis ('TTM' or 'FY') or {} if not available."""
     try:
         s = _get_yf_statements(yf_sym)
-        t = yf.Ticker(yf_sym)
-        info = t.info
-        market_cap = info.get("marketCap")
     except Exception:
         return {}
 
@@ -170,7 +167,6 @@ def _compute_metrics_for_symbol(yf_sym: str) -> dict:
     gm   = _safe_ratio(gp, rev)
     om   = _safe_ratio(ebit, rev)
     cc   = _safe_ratio(fcf, ebit)
-    fcf_yield = _safe_ratio(fcf, market_cap)
     
     # Interest Cover: Raw ratio, no capping.
     ic = None
@@ -191,7 +187,6 @@ def _compute_metrics_for_symbol(yf_sym: str) -> dict:
         "om": om,
         "cc": cc,
         "ic": ic,
-        "fcf_yield": fcf_yield,
         # for audit
         "_rev": rev, "_gp": gp, "_ebit": ebit, "_ta": ta, "_cl": cl,
         "_cfo": cfo, "_capex": capex, "_int": intexp, "_ic_inv_cap": invested_capital,
@@ -252,7 +247,7 @@ def ensure_fundamentals(weights_t212: dict[str, float]) -> Path:
             })
 
     # Portfolio-weighted aggregates (exclude missing per metric)
-    vals = {k: {s: v.get(k) for s, v in per_tkr.items()} for k in ["roce","gm","om","cc","ic","fcf_yield"]}
+    vals = {k: {s: v.get(k) for s, v in per_tkr.items()} for k in ["roce","gm","om","cc","ic"]}
     agg = {k: _reweighted_mean(vals[k], w_yf) for k in vals}
 
     out = {

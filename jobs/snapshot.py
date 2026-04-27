@@ -14,9 +14,9 @@ def _anchor_date_iso():
         d = d - timedelta(days=2)
     return d.isoformat()
 
-def append_today_snapshot_if_missing(df, q_metrics: dict = None, path: Path = NAV_CSV):
+def append_today_snapshot_if_missing(df, path: Path = NAV_CSV):
     """
-    Append/update today's NAV (GBP) and quality metrics to data/nav_daily.csv.
+    Append/update today's NAV (GBP) to data/nav_daily.csv.
     Uses df['total_value_gbp'] column already computed in app.py.
     """
     DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -29,34 +29,11 @@ def append_today_snapshot_if_missing(df, q_metrics: dict = None, path: Path = NA
     else:
         nav_df = pd.DataFrame(columns=["date", "nav_gbp"])
 
-    # Ensure quality columns exist
-    for col in ["roce", "gm", "om", "cc", "ic", "fcf_yield"]:
-        if col not in nav_df.columns:
-            nav_df[col] = float("nan")
-
-    q = q_metrics or {}
-    new_data = {
-        "nav_gbp": nav,
-        "roce": q.get("roce"),
-        "gm": q.get("gm"),
-        "om": q.get("om"),
-        "cc": q.get("cc"),
-        "ic": q.get("ic"),
-        "fcf_yield": q.get("fcf_yield")
-    }
-
     if (nav_df["date"] == date_key).any():
-        for k, v in new_data.items():
-            if v is not None:
-                nav_df.loc[nav_df["date"] == date_key, k] = float(v)
-            else:
-                if k not in nav_df.columns:
-                    nav_df.loc[nav_df["date"] == date_key, k] = float("nan")
+        nav_df.loc[nav_df["date"] == date_key, "nav_gbp"] = nav
     else:
-        new_row = {"date": date_key}
-        new_row.update({k: (float(v) if v is not None else float("nan")) for k, v in new_data.items()})
         nav_df = pd.concat(
-            [nav_df, pd.DataFrame([new_row])],
+            [nav_df, pd.DataFrame([{"date": date_key, "nav_gbp": nav}])],
             ignore_index=True
         )
 
