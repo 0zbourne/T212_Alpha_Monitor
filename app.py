@@ -255,6 +255,8 @@ try:
         
         plot_df = comparison.melt(id_vars=["date"], value_vars=["Portfolio (TWR)", "S&P 500 (GBP)", "Nasdaq 100 (GBP)"], var_name="Series", value_name="Index")
         
+        selection = alt.selection_point(fields=['Series'], bind='legend')
+        
         line_chart = alt.Chart(plot_df).mark_line(strokeWidth=2.5, interpolate='monotone').encode(
             x=alt.X("date:T", title=None, axis=alt.Axis(grid=False, labelColor="#8892B0")),
             y=alt.Y("Index:Q", title=None, scale=alt.Scale(zero=False), axis=alt.Axis(grid=True, gridColor="rgba(255,255,255,0.05)", labelColor="#8892B0")),
@@ -262,8 +264,9 @@ try:
                 scale=alt.Scale(domain=["Portfolio (TWR)", "S&P 500 (GBP)", "Nasdaq 100 (GBP)"], range=["#00DB8B", "#8892B0", "#4B90FF"]),
                 legend=alt.Legend(orient="top", title=None, labelColor="#FFFFFF", labelFontSize=12, symbolType="circle")
             ),
+            opacity=alt.condition(selection, alt.value(1), alt.value(0.05)),
             tooltip=["date:T", "Series:N", alt.Tooltip("Index:Q", format=".2f")]
-        ).properties(height=400).configure_view(strokeOpacity=0)
+        ).add_params(selection).properties(height=400).configure_view(strokeOpacity=0)
         
         st.altair_chart(line_chart, use_container_width=True)
     else:
