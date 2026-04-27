@@ -16,6 +16,7 @@ from jobs.snapshot import append_today_snapshot_if_missing
 from pdperf.series import read_nav, daily_returns_twr, cumulative_return
 from pdperf.cashflows import build_cash_flows
 from bench.sp500 import get_sp500_daily
+from bench.nasdaq import get_nasdaq_daily
 
 # ---- CONFIG & SETTINGS ----
 st.set_page_config(page_title="T212 Alpha Monitor", layout="wide")
@@ -237,23 +238,28 @@ try:
     start_date = pd.to_datetime(nav_data.index).min().strftime("%Y-%m-%d")
     end_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     sp500 = get_sp500_daily(start_date, end_date)
+    nasdaq = get_nasdaq_daily(start_date, end_date)
     
     # Merge and compare
     port_daily["date"] = pd.to_datetime(port_daily["date"]).dt.date
     sp500["date"] = pd.to_datetime(sp500["date"]).dt.date
+    nasdaq["date"] = pd.to_datetime(nasdaq["date"]).dt.date
+    
     comparison = port_daily.merge(sp500[["date", "daily_ret"]].rename(columns={"daily_ret": "r_bench"}), on="date", how="inner")
+    comparison = comparison.merge(nasdaq[["date", "daily_ret"]].rename(columns={"daily_ret": "r_ndq"}), on="date", how="inner")
     
     if not comparison.empty:
         comparison["Portfolio (TWR)"] = (100.0 * (1.0 + comparison["r_port"]).cumprod())
         comparison["S&P 500 (GBP)"] = (100.0 * (1.0 + comparison["r_bench"]).cumprod())
+        comparison["Nasdaq 100 (GBP)"] = (100.0 * (1.0 + comparison["r_ndq"]).cumprod())
         
-        plot_df = comparison.melt(id_vars=["date"], value_vars=["Portfolio (TWR)", "S&P 500 (GBP)"], var_name="Series", value_name="Index")
+        plot_df = comparison.melt(id_vars=["date"], value_vars=["Portfolio (TWR)", "S&P 500 (GBP)", "Nasdaq 100 (GBP)"], var_name="Series", value_name="Index")
         
         line_chart = alt.Chart(plot_df).mark_line(strokeWidth=2.5, interpolate='monotone').encode(
             x=alt.X("date:T", title=None, axis=alt.Axis(grid=False, labelColor="#8892B0")),
             y=alt.Y("Index:Q", title=None, scale=alt.Scale(zero=False), axis=alt.Axis(grid=True, gridColor="rgba(255,255,255,0.05)", labelColor="#8892B0")),
             color=alt.Color("Series:N", 
-                scale=alt.Scale(domain=["Portfolio (TWR)", "S&P 500 (GBP)"], range=["#00DB8B", "#8892B0"]),
+                scale=alt.Scale(domain=["Portfolio (TWR)", "S&P 500 (GBP)", "Nasdaq 100 (GBP)"], range=["#00DB8B", "#8892B0", "#4B90FF"]),
                 legend=alt.Legend(orient="top", title=None, labelColor="#FFFFFF", labelFontSize=12, symbolType="circle")
             ),
             tooltip=["date:T", "Series:N", alt.Tooltip("Index:Q", format=".2f")]
